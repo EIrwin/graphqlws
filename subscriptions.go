@@ -73,7 +73,7 @@ type Subscriptions sync.Map
 type SubscriptionManager interface {
 	// Subscriptions returns all registered subscriptions, grouped
 	// by connection.
-	Subscriptions() sync.Map
+	Subscriptions() *sync.Map
 
 	// AddSubscription adds a new subscription to the manager.
 	AddSubscription(Connection, *Subscription) []error
@@ -90,7 +90,7 @@ type SubscriptionManager interface {
  */
 
 type subscriptionManager struct {
-	subscriptions sync.Map
+	subscriptions *sync.Map
 	schema        *graphql.Schema
 	logger        *log.Entry
 }
@@ -106,13 +106,13 @@ func NewSubscriptionManager(schema *graphql.Schema) SubscriptionManager {
 
 func newSubscriptionManager(schema *graphql.Schema, logger *log.Entry) SubscriptionManager {
 	manager := new(subscriptionManager)
-	manager.subscriptions = sync.Map{}
+	manager.subscriptions = &sync.Map{}
 	manager.logger = logger
 	manager.schema = schema
 	return manager
 }
 
-func (m *subscriptionManager) Subscriptions() sync.Map {
+func (m *subscriptionManager) Subscriptions() *sync.Map {
 	return m.subscriptions
 }
 

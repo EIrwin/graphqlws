@@ -16,3 +16,6 @@
 # IDEA GoLand
 *.iml
 .idea
+
+# Golang
+vendor/
