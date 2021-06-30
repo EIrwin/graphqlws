@@ -61,28 +61,18 @@ func (s *Subscription) MatchesField(field string) bool {
 
 // ConnectionSubscriptions defines a map of all subscriptions of
 // a connection by their IDs.
-type ConnectionSubscriptions map[string]*Subscription
+// type ConnectionSubscriptions map[string]*Subscription
 
 // Subscriptions defines a map of connections to a map of
 // subscription IDs to subscriptions.
 // type Subscriptions map[Connection]ConnectionSubscriptions
-type Subscriptions struct {
-	*sync.Map
-}
-
-func (r *Subscriptions) Iterate(f func(key, value interface{})) {
-	r.Map.Range(func(key, value interface{}) bool {
-		f(key, value.(ConnectionSubscriptions))
-		return true
-	})
-}
 
 // SubscriptionManager provides a high-level interface to managing
 // and accessing the subscriptions made by GraphQL WS clients.
 type SubscriptionManager interface {
 	// Subscriptions returns all registered subscriptions, grouped
 	// by connection.
-	Subscriptions() Subscriptions
+	Subscriptions() *sync.Map
 
 	// AddSubscription adds a new subscription to the manager.
 	AddSubscription(Connection, *Subscription) []error
@@ -99,7 +89,7 @@ type SubscriptionManager interface {
  */
 
 type subscriptionManager struct {
-	subscriptions Subscriptions
+	subscriptions *sync.Map
 	schema        *graphql.Schema
 	logger        *log.Entry
 }
@@ -114,12 +104,10 @@ func NewSubscriptionManager(schema *graphql.Schema) SubscriptionManager {
 }
 
 func newSubscriptionManager(schema *graphql.Schema, logger *log.Entry) SubscriptionManager {
-	return &subscriptionManager{schema: schema, logger: logger, subscriptions: Subscriptions{
-		Map: &sync.Map{},
-	}}
+	return &subscriptionManager{schema: schema, logger: logger, subscriptions: &sync.Map{}}
 }
 
-func (m *subscriptionManager) Subscriptions() Subscriptions {
+func (m *subscriptionManager) Subscriptions() *sync.Map {
 	return m.subscriptions
 }
 
@@ -163,11 +151,11 @@ func (m *subscriptionManager) AddSubscription(
 
 	// Allocate the connection's map of subscription IDs to
 	// subscriptions on demand
-	connSubsInterface, _ := m.subscriptions.LoadOrStore(conn, make(ConnectionSubscriptions))
+	connSubsInterface, _ := m.subscriptions.LoadOrStore(conn, &sync.Map{})
 
 	// Add the subscription if it hasn't already been added
-	connSubs := connSubsInterface.(ConnectionSubscriptions)
-	if connSubs[subscription.ID] != nil {
+	connSubs := connSubsInterface.(*sync.Map)
+	if val, ok := connSubs.Load(subscription.ID); ok || val != nil {
 		m.logger.WithFields(log.Fields{
 			"conn":         conn.ID(),
 			"subscription": subscription.ID,
@@ -175,7 +163,7 @@ func (m *subscriptionManager) AddSubscription(
 		return []error{errors.New("Cannot register subscription twice")}
 	}
 
-	connSubs[subscription.ID] = subscription
+	connSubs.Store(subscription.ID, subscription)
 
 	return nil
 }
@@ -195,11 +183,17 @@ func (m *subscriptionManager) RemoveSubscription(
 		m.logger.Errorf("Couldn't remove subscription, connection doesn't exist")
 		return
 	}
-	subs := subsInterface.(ConnectionSubscriptions)
-	delete(subs, subscription.ID)
+	subs := subsInterface.(*sync.Map)
+	subs.Delete(subscription.ID)
+
+	hasElems := false
+	subs.Range(func(key, value interface{}) bool {
+		hasElems = true
+		return false
+	})
 
 	// Remove the connection as well if there are no subscriptions left
-	if len(subs) == 0 {
+	if !hasElems {
 		m.subscriptions.Delete(conn)
 	}
 }
@@ -212,11 +206,13 @@ func (m *subscriptionManager) RemoveSubscriptions(conn Connection) {
 	// Only remove subscriptions if we know the connection
 	connSubsInterface, connSubsExist := m.subscriptions.Load(conn)
 	if connSubsExist {
-		connSubs := connSubsInterface.(ConnectionSubscriptions)
+		connSubs := connSubsInterface.(*sync.Map)
 		// Remove subscriptions one by one
-		for opID := range connSubs {
-			m.RemoveSubscription(conn, connSubs[opID])
-		}
+
+		connSubs.Range(func(key, value interface{}) bool {
+			m.RemoveSubscription(conn, value.(*Subscription))
+			return true
+		})
 
 		// Remove the connection's subscription map altogether
 		m.subscriptions.Delete(conn)
