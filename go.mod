@@ -1,4 +1,4 @@
-module github.com/exapsy/graphqlws
+module github.com/didrikmunther/graphqlws
 
 go 1.15
 
