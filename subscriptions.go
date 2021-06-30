@@ -114,7 +114,9 @@ func NewSubscriptionManager(schema *graphql.Schema) SubscriptionManager {
 }
 
 func newSubscriptionManager(schema *graphql.Schema, logger *log.Entry) SubscriptionManager {
-	return &subscriptionManager{schema: schema, logger: logger, subscriptions: Subscriptions{}}
+	return &subscriptionManager{schema: schema, logger: logger, subscriptions: Subscriptions{
+		Map: &sync.Map{},
+	}}
 }
 
 func (m *subscriptionManager) Subscriptions() Subscriptions {
