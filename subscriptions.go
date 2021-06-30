@@ -66,14 +66,23 @@ type ConnectionSubscriptions map[string]*Subscription
 // Subscriptions defines a map of connections to a map of
 // subscription IDs to subscriptions.
 // type Subscriptions map[Connection]ConnectionSubscriptions
-type Subscriptions sync.Map
+type Subscriptions struct {
+	*sync.Map
+}
+
+func (r *Subscriptions) Iterate(f func(key, value interface{})) {
+	r.Map.Range(func(key, value interface{}) bool {
+		f(key, value.(ConnectionSubscriptions))
+		return true
+	})
+}
 
 // SubscriptionManager provides a high-level interface to managing
 // and accessing the subscriptions made by GraphQL WS clients.
 type SubscriptionManager interface {
 	// Subscriptions returns all registered subscriptions, grouped
 	// by connection.
-	Subscriptions() *sync.Map
+	Subscriptions() Subscriptions
 
 	// AddSubscription adds a new subscription to the manager.
 	AddSubscription(Connection, *Subscription) []error
@@ -90,7 +99,7 @@ type SubscriptionManager interface {
  */
 
 type subscriptionManager struct {
-	subscriptions *sync.Map
+	subscriptions Subscriptions
 	schema        *graphql.Schema
 	logger        *log.Entry
 }
@@ -105,14 +114,10 @@ func NewSubscriptionManager(schema *graphql.Schema) SubscriptionManager {
 }
 
 func newSubscriptionManager(schema *graphql.Schema, logger *log.Entry) SubscriptionManager {
-	manager := new(subscriptionManager)
-	manager.subscriptions = &sync.Map{}
-	manager.logger = logger
-	manager.schema = schema
-	return manager
+	return &subscriptionManager{schema: schema, logger: logger, subscriptions: Subscriptions{}}
 }
 
-func (m *subscriptionManager) Subscriptions() *sync.Map {
+func (m *subscriptionManager) Subscriptions() Subscriptions {
 	return m.subscriptions
 }
 
