@@ -32,10 +32,10 @@ const (
 	writeTimeout = 10 * time.Second
 
 	// Timeout for reading the next pong message from the peer
-	pongWait = 60 * time.Second
+	// pongWait = 60 * time.Second
 
 	// Interval for sending pings to peer. Must be less than pongWait
-	pingPeriod = (pongWait * 9) / 10
+	pingPeriod = 20 * time.Second
 )
 
 // InitMessagePayload defines the parameters of a connection
@@ -260,8 +260,12 @@ func (conn *connection) writeLoop() {
 				return
 			}
 		case <-ticker.C:
+			conn.logger.Debug("ping ticker triggered")
 			conn.ws.SetWriteDeadline(time.Now().Add(writeTimeout))
-			if err := conn.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
+			if err := conn.ws.WriteMessage(websocket.PingMessage, []byte("keepalive")); err != nil {
+				conn.logger.WithFields(log.Fields{
+					"err": err,
+				}).Error("error sending keepalive")
 				return
 			}
 		}
@@ -273,7 +277,7 @@ func (conn *connection) readLoop() {
 	defer conn.ws.Close()
 
 	conn.ws.SetReadLimit(readLimit)
-	conn.ws.SetReadDeadline(time.Now().Add(pongWait))
+	// conn.ws.SetReadDeadline(time.Now().Add(pongWait))
 
 	for {
 		// Read the next message received from the client
